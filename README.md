@@ -116,6 +116,7 @@ npm start -- -u <user> <...books>
 - `yarn build` - Build both ESM and CommonJS versions
 - `yarn build:esm` - Build ES modules version only
 - `yarn build:cjs` - Build CommonJS version only
+- `yarn start` - Run the compiled CLI from the built files
 - `yarn dev` - Run in development mode with hot reload
 - `yarn lint` - Check code formatting and run ESLint
 - `yarn format` - Format code and fix ESLint issues
