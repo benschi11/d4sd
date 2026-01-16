@@ -27,6 +27,7 @@ export abstract class Shelf {
     };
     this.browser = await puppeteer.launch({
       headless: true,
+      protocolTimeout: this.options.timeout,
     });
     try {
       await this.login();
