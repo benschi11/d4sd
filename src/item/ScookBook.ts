@@ -5,6 +5,9 @@ import { defDownloadOptions, DownloadOptions } from './download-options';
 import { getPdfOptions } from './get-pdf-options';
 
 export class ScookBook extends Book {
+  // Delay between page navigations to ensure content loads properly
+  private static readonly PAGE_NAVIGATION_DELAY_MS = 1000;
+
   async download(outDir: string, _options?: DownloadOptions) {
     const dir = await this.mkSubDir(outDir);
     const options = defDownloadOptions(_options);
@@ -54,6 +57,9 @@ export class ScookBook extends Book {
       }
 
       // Page download - navigate sequentially through pages
+      // Note: Sequential navigation is required because page URLs now use GUIDs
+      // instead of sequential numbers, making parallel downloads impossible.
+      // This results in slower downloads compared to the previous parallel approach.
       let downloadedPages = 0;
       const getProgress = () => ({
         item: this,
@@ -93,7 +99,7 @@ export class ScookBook extends Book {
           await goNextButton.click();
 
           // Wait for navigation to complete
-          await delay(1000);
+          await delay(ScookBook.PAGE_NAVIGATION_DELAY_MS);
         }
       }
     } finally {
