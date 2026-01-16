@@ -15,8 +15,8 @@ export class ScookShelf extends Shelf {
   protected async login() {
     await this.formLogin(
       '/auth/puma',
-      '#Input_Username',
-      '#input-login-password',
+      '#Input_UsernameOrEmail',
+      '#Input_Password',
       'form#account button[type="submit"]',
       (page) =>
         Promise.race([
