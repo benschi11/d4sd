@@ -32,13 +32,33 @@ export class ScookBook extends Book {
 
     // Get page count and navigate through pages sequentially
     let pageCount: number;
+    let pageXUrl: string;
 
     const page = await this.shelf.browser.newPage();
     try {
       await page.goto(bookFrameUrl, {
-        waitUntil: 'load',
+        waitUntil: 'domcontentloaded',
         timeout: this.shelf.options.timeout,
       });
+
+      // Go to the first page
+     console.log('Frame: ', bookFrameUrl);
+    // Wait for the toolbar to be fully loaded before interacting
+      await page.waitForSelector('.toolbar', {
+        timeout: this.shelf.options.timeout,
+      });
+
+      // Click "go-first" to ensure we start at page 1
+      const goFirstButton = await page.$('.go-first');
+      if (goFirstButton) {
+        await goFirstButton.click();
+        await delay(ScookBook.PAGE_NAVIGATION_DELAY_MS);
+      }
+
+
+
+
+
 
       while (true) {
         try {
@@ -72,20 +92,33 @@ export class ScookBook extends Book {
       // Download each page sequentially
       for (let pageNo = 1; pageNo <= pageCount; pageNo++) {
         // Wait for the image to load
-        await page.waitForSelector('.image-div > img', {
+        const img = await page.waitForSelector('.image-div > img', {
+          timeout: this.shelf.options.timeout,
+        });
+        
+        if (!img) {
+          throw new ScrapeError('Could not locate scook book page image.');
+        }
+        pageXUrl = await img.evaluate((img) => (img as HTMLImageElement).src);
+
+        const imgPage = await this.shelf.browser.newPage();
+
+        await imgPage.goto(pageXUrl, {
+          waitUntil: 'domcontentloaded',
           timeout: this.shelf.options.timeout,
         });
 
         // Save current page as pdf
         const pdfFile = this.getPdfPath(dir, pageNo);
 
-        await page.pdf({
+        await imgPage.pdf({
           ...(await getPdfOptions(page, options)),
           path: pdfFile,
         });
 
         downloadedPages++;
         options.onProgress(getProgress());
+        await imgPage.close();
 
         // Navigate to next page if not the last page
         if (pageNo < pageCount) {
