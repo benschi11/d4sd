@@ -108,6 +108,19 @@ export class ScookBook extends Book {
           timeout: this.shelf.options.timeout,
         });
 
+        // Get the image URL and store the current viewer URL
+        const viewerUrl = page.url();
+        const imageUrl = await page.$eval(
+          '.image-div > img',
+          (img) => (img as HTMLImageElement).src
+        );
+
+        // Navigate to the image directly to avoid capturing viewer UI
+        await page.goto(imageUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: this.shelf.options.timeout,
+        });
+
         // Save current page as pdf
         const pdfFile = this.getPdfPath(dir, pageNo);
 
@@ -122,6 +135,17 @@ export class ScookBook extends Book {
 
         // Navigate to next page if not the last page
         if (pageNo < pageCount) {
+          // Go back to the viewer
+          await page.goto(viewerUrl, {
+            waitUntil: 'load',
+            timeout: this.shelf.options.timeout,
+          });
+
+          // Wait for the viewer to be ready
+          await page.waitForSelector('.go-next', {
+            timeout: this.shelf.options.timeout,
+          });
+
           const goNextButton = await page.$('.go-next');
           if (!goNextButton) {
             throw new ScrapeError(
