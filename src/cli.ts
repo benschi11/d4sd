@@ -278,9 +278,7 @@ const cmd = command({
           }
         }
       } finally {
-        if (process.env.NODE_ENV !== 'development') {
-          await shelf.destroy();
-        }
+        await shelf.destroy();
       }
     } catch (e) {
       console.log(`Error: ${e instanceof Error ? e.message : e}`);
