@@ -1,3 +1,4 @@
+import { Page } from 'puppeteer';
 import { ScrapeError } from '../error/ScrapeError';
 import { delay, promisePool } from '../util/promise';
 import { Book } from './Book';
@@ -6,7 +7,7 @@ import { getPdfOptions } from './get-pdf-options';
 
 export class ScookBook extends Book {
   async download(outDir: string, _options?: DownloadOptions) {
-    const dir = await this.mkSubDir(outDir);
+    const saveDir = await this.mkSubDir(outDir);
     const options = defDownloadOptions(_options);
 
     // Get book frame url
@@ -27,88 +28,115 @@ export class ScookBook extends Book {
       await userPage.close();
     }
 
-    // Get page count, first page url
-    let pageCount: number;
-    let pageXUrl: string;
-
-    const page = await this.shelf.browser.newPage();
+    const framePage = await this.shelf.browser.newPage();
     try {
-      await page.goto(bookFrameUrl, {
+      await framePage.goto(bookFrameUrl, {
         waitUntil: 'load',
         timeout: this.shelf.options.timeout,
       });
 
-      while (true) {
-        try {
-          pageCount = parseInt(
-            await page.$eval(
-              '#total-pages',
-              (totalPages) => (totalPages as HTMLSpanElement).innerText
-            )
-          );
-        } catch (e) {
-          await delay(1000);
-          continue;
-        }
-        if (isNaN(pageCount)) continue;
-        break;
-      }
+      const pageUrls = await this.getPageUrls(framePage);
 
-      const img = await page.$('.image-div > img');
-      if (!img) {
-        throw new ScrapeError('Could not locate scook book page image.');
-      }
-      pageXUrl = await img.evaluate((img) => (img as HTMLImageElement).src);
-    } finally {
-      await page.close();
-    }
+      let downloadedPages = 0;
+      const getProgress = () => ({
+        item: this,
+        percentage: downloadedPages / pageUrls.length,
+        downloadedPages,
+        pageCount: pageUrls.length,
+      });
+      options.onStart(getProgress());
 
-    // Page download pool
-    let downloadedPages = 0;
-    const getProgress = () => ({
-      item: this,
-      percentage: downloadedPages / pageCount,
-      downloadedPages,
-      pageCount,
-    });
-    options.onStart(getProgress());
-
-    await promisePool(
-      async (i) => {
-        const pageNo = i + 1;
-
-        const page = await this.shelf.browser.newPage();
-        try {
-          await page.goto(
-            pageXUrl.replace(
-              /(?<=-)[0-9]+(?=\.)/g,
-              pageNo.toString().padStart(3, '0')
-            ),
-            {
-              waitUntil: 'domcontentloaded',
-              timeout: this.shelf.options.timeout,
-            }
-          );
-
-          // Save it as pdf
-          const pdfFile = this.getPdfPath(dir, pageNo);
-
-          await page.pdf({
-            ...(await getPdfOptions(page, options)),
-            path: pdfFile,
-          });
+      await promisePool(
+        async (i) => {
+          const pageNo = i + 1;
+          await this.savePage(pageUrls[i], saveDir, pageNo, options);
 
           downloadedPages++;
           options.onProgress(getProgress());
-        } finally {
-          await page.close();
-        }
-      },
-      options.concurrency,
-      pageCount
-    );
+        },
+        options.concurrency,
+        pageUrls.length
+      );
 
-    // Merge pdf pages
-    options.mergePdfs && (await this.mergePdfPages(dir, pageCount));
+      // Merge pdf pages
+      options.mergePdfs && (await this.mergePdfPages(saveDir, pageUrls.length));
+    } finally {
+      await framePage.close();
+    }
+  }
+
+  private async getPageUrls(framePage: Page) {
+    // get count
+    let pageCount: number;
+    while (true) {
+      try {
+        pageCount = parseInt(
+          await framePage.$eval(
+            '#total-pages',
+            (totalPages) => (totalPages as HTMLSpanElement).innerText
+          )
+        );
+      } catch (e) {
+        await delay(1000);
+        continue;
+      }
+      if (isNaN(pageCount)) continue;
+      break;
+    }
+
+    const goPageForm = await framePage.$('form.go-page');
+    if (!goPageForm) {
+      throw new ScrapeError('Could not locate scooks go page form.');
+    }
+    const curPageInput = await framePage.$('input.current-page');
+    if (!curPageInput) {
+      throw new ScrapeError('Could not locate scooks current page input.');
+    }
+
+    let pageUrls: string[] = [];
+    for (let i = 0; i < pageCount; i++) {
+      const pageNo = i + 1;
+
+      // nav to page
+      await curPageInput.type(pageNo.toString());
+      await curPageInput.press('Enter');
+
+      // get page
+      const img = await framePage.$('.image-div > img');
+      if (!img) {
+        throw new ScrapeError('Could not locate scook book page image.');
+      }
+      const pageUrl = await img.evaluate(
+        (img) => (img as HTMLImageElement).src
+      );
+      pageUrls.push(pageUrl);
+    }
+
+    return pageUrls;
+  }
+
+  private async savePage(
+    pageUrl: string,
+    saveDir: string,
+    pageNo: number,
+    options: DownloadOptions
+  ) {
+    const page = await this.shelf.browser.newPage();
+    try {
+      await page.goto(pageUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: this.shelf.options.timeout,
+      });
+
+      // Save as pdf
+      const pdfFile = this.getPdfPath(saveDir, pageNo);
+
+      await page.pdf({
+        ...(await getPdfOptions(page, options)),
+        path: pdfFile,
+      });
+    } finally {
+      await page.close();
+    }
   }
 }
