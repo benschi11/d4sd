@@ -23,7 +23,7 @@
     "build:cjs": "tsc --module commonjs --outDir cjs && echo '{\"type\": \"commonjs\"}' > cjs/package.json",
     "prepack": "yarn build",
     "start": "node ./esm/cli.js",
-    "deploy": "npm run build:esm && npm start --",
+    "tsx": "dotenv -v NODE_ENV=development tsx ./src/cli.ts --",
     "dev": "dotenv -v NODE_ENV=development tsx watch --clear-screen=false ./src/cli.ts --",
     "ncu": "ncu -u -x typescript",
     "lint": "prettier --check . '!./{,data}' && eslint",
